@@ -4,7 +4,7 @@ use Net::Netrc;
 
 our ($apibase, $user, $password);
 sub init() {
-    $apibase='api.opensuse.org';
+    $apibase=$ENV{OBSAPI}||'api.opensuse.org';
     my $mach = Net::Netrc->lookup($apibase) or die "no entry for $apibase found in ~/.netrc";
     ($user, $password) = $mach->lpa;
     die unless $user;
