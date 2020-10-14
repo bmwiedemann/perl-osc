@@ -1,6 +1,8 @@
 package osc;
 use LWP::UserAgent ();
 use Net::Netrc;
+use XML::LibXML;
+use Digest::MD5;
 
 our ($apibase, $user, $password);
 sub init() {
@@ -39,5 +41,55 @@ sub apireq($$)
 }
 
 sub apiget($) {apireq('GET', shift)}
+
+sub xmlget($) {
+    my $xml = apireq('GET', shift);
+    my $dom = XML::LibXML->load_xml(string => $xml);
+    return $dom;
+}
+
+sub projectpkgs($) {
+    my $project = shift;
+    my $dom = xmlget(makeurl(['source', $project]));
+    map {
+        $_->to_literal();
+    } $dom->findnodes('/directory/entry/@name');
+}
+
+sub projectpkginfos($) {
+    my $project = shift;
+    my @pkgs= projectpkgs($project);
+    my $dom = xmlget(makeurl(['source', $project],{
+        view=>"info", nofilename=>1,
+        package=>join("&package=", @pkgs)}));
+    my @srcinfos = $dom->findnodes('/sourceinfolist/sourceinfo');
+    return @srcinfos;
+}
+
+sub projectcheckupdate() {
+    my $project = `cat .osc/_project`;chomp($project);
+    my @srcinfos = projectpkginfos($project);
+    foreach my $srcinfo (@srcinfos) {
+       my $pkg = $srcinfo->getAttribute("package");
+       my $md5 = calcpkgmd5($pkg);
+       if($md5 ne $srcinfo->getAttribute("verifymd5")) {
+           print "needs update: $pkg\n";
+       } else {
+           print "is uptodate: $pkg\n";
+       }
+    }
+}
+
+sub calcpkgmd5($) {
+    my $path = shift;
+    my $dom = XML::LibXML->load_xml(location => $path."/.osc/_files");
+    return Digest::MD5::md5_hex(
+        join "", map {
+            my $n = $_->{name};
+            ($n eq "_link")?"":
+            "$_->{md5}  $n\n"
+        } $dom->findnodes('/directory/entry')
+    );
+}
 
 1;
