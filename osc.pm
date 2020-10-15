@@ -58,10 +58,9 @@ sub projectpkgs($) {
 
 sub projectpkginfos($) {
     my $project = shift;
-    my @pkgs= projectpkgs($project);
     my $dom = xmlget(makeurl(['source', $project],{
         view=>"info", nofilename=>1,
-        package=>join("&package=", @pkgs)}));
+        }));
     my @srcinfos = $dom->findnodes('/sourceinfolist/sourceinfo');
     return @srcinfos;
 }
@@ -71,6 +70,7 @@ sub projectcheckupdate() {
     my @srcinfos = projectpkginfos($project);
     foreach my $srcinfo (@srcinfos) {
        my $pkg = $srcinfo->getAttribute("package");
+       next if $pkg =~ /:/;
        my $md5 = calcpkgmd5($pkg);
        if($md5 ne $srcinfo->getAttribute("verifymd5")) {
            print "needs update: $pkg\n";
@@ -82,7 +82,8 @@ sub projectcheckupdate() {
 
 sub calcpkgmd5($) {
     my $path = shift;
-    my $dom = XML::LibXML->load_xml(location => $path."/.osc/_files");
+    my $dom = eval {XML::LibXML->load_xml(location => $path."/.osc/_files")};
+    return undef if $@;
     return Digest::MD5::md5_hex(
         join "", map {
             my $n = $_->{name};
